@@ -125,7 +125,6 @@ module.exports = function (options) {
     getLatest: function (query, plainText, kind) {
       kind = kind || 'to'
       return this.search(query, kind, 0, 1).then(response => {
-        debugger;
         if (!response.count) return
         let mail = response.items[0]
         return (!plainText && this.getHTML(mail)) || this.getText(mail)
