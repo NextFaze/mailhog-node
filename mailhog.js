@@ -1,5 +1,7 @@
 'use strict'
 
+const request = require('request')
+
 /*
  * NodeJS library to interact with the MailHog API.
  * https://github.com/blueimp/mailhog-node
@@ -14,20 +16,20 @@
  // Sends a GET request to the given url.
  // Returns a promise that resolves with parsed JSON data.
 function getJSON (url) {
-  const http = url.startsWith('https') ? 'https' : 'http'
-  return new Promise((resolve, reject) => {
-    require(http).get(url, (response) => {
-      let body = ''
-      response
-        .on('data', (chunk) => { body += chunk })
-        .on('end', () => {
-          try {
-            resolve(JSON.parse(body))
-          } catch (error) {
-            reject(error)
-          }
-        })
-    }).on('error', reject)
+  return new Promise(function(resolve, reject) {
+    request.get(url, (function(err, res, data) {
+      if(err) return reject(err);
+      resolve(JSON.parse(data));
+    }));
+  })
+}
+
+function deleteAll (url) {
+  return new Promise(function(resolve, reject) {
+    request.del(url.replace('v2', 'v1'), (function(err, res, data) {
+      if(err) return reject(err);
+      resolve();
+    }));
   })
 }
 
@@ -63,13 +65,19 @@ function getContentPart (mail, typeRegExp) {
   if (mail.MIME) parts = parts.concat(mail.MIME.Parts)
   for (let part of parts) {
     let type = (part.Headers['Content-Type'] || '').toString()
+    let charset = /\bcharset=([\w_-]+)(?:;|$)/.exec(type)
+    try {
+      charset = charset[1]
+    } catch(er) {
+      charset = 'utf-8'
+    }
     if (typeRegExp.test(type)) {
       return {
         type: type,
         content: decode(
           part.Body,
           (part.Headers['Content-Transfer-Encoding'] || '').toString(),
-          /\bcharset=([\w_-]+)(?:;|$)/.exec(type)[1]
+          charset
         )
       }
     }
@@ -94,6 +102,10 @@ module.exports = function (options) {
       if (limit) url += `&limit=${limit}`
       return getJSON(url)
     },
+    deleteAll: function() {
+      let url = `${apiURL}/messages`
+      return deleteAll(url)
+    },
     // Returns the text content part of the given email object.
     // * mail is an object returned by MailHog for an email message
     getText: function (mail) {
@@ -113,6 +125,7 @@ module.exports = function (options) {
     getLatest: function (query, plainText, kind) {
       kind = kind || 'to'
       return this.search(query, kind, 0, 1).then(response => {
+        debugger;
         if (!response.count) return
         let mail = response.items[0]
         return (!plainText && this.getHTML(mail)) || this.getText(mail)
